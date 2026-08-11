@@ -1,34 +1,655 @@
-const plannedResources = ['Hope', 'Stress', 'HP', 'Armor', 'Custom']
+import { useEffect, useRef, useState } from 'react'
+import daggerHeader from './assets/dagger-header-v2.png'
+import { createDefaultCharacter } from './data/defaultTracker'
+import { loadTrackerFromStorage, saveTrackerToStorage } from './data/trackerStorage'
+
+const maximumResourceSlots = 12
+
+function getResourceValue(resource) {
+  return resource.valueType === 'available' ? resource.current : resource.marked
+}
+
+function getMinimumResourceMaximum(resource) {
+  return resource.id === 'armor' ? 0 : 1
+}
+
+function updateCharacterResource(character, resourceId, updateResource) {
+  const updateResources = (resources = []) =>
+    resources.map((resource) =>
+      resource.id === resourceId ? updateResource(resource) : resource,
+    )
+
+  return {
+    ...character,
+    resources: updateResources(character.resources),
+    customResources: updateResources(character.customResources),
+  }
+}
+
+function createCustomResourceId() {
+  return `custom-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
+}
+
+function createCharacterId() {
+  return `character-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
+}
+
+function getCharacterDisplayName(character) {
+  return character.name.trim() || 'Unnamed Character'
+}
 
 export default function App() {
-  return (
-    <main className="min-h-screen px-5 py-12 sm:px-8">
-      <section className="mx-auto flex min-h-[calc(100vh-6rem)] max-w-lg flex-col justify-center">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.24em] text-amber-300">
-          Local setup ready
-        </p>
-        <h1 className="text-4xl font-bold tracking-tight text-stone-50 sm:text-5xl">
-          Daggerheart Tracker
-        </h1>
-        <p className="mt-5 max-w-md text-lg leading-8 text-stone-300">
-          A quick, table-friendly way to track the resources that change most during play.
-        </p>
+  const [tracker, setTracker] = useState(loadTrackerFromStorage)
+  const [isEditingMaximums, setIsEditingMaximums] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isAddingTracker, setIsAddingTracker] = useState(false)
+  const [isManagingCharacters, setIsManagingCharacters] = useState(false)
+  const [characterPendingDeletion, setCharacterPendingDeletion] = useState(null)
+  const [customTrackerName, setCustomTrackerName] = useState('')
+  const [customTrackerMaximum, setCustomTrackerMaximum] = useState('6')
+  const menuRef = useRef(null)
+  const activeCharacter = tracker.characters.find(
+    (character) => character.id === tracker.activeCharacterId,
+  )
+  const characterName = activeCharacter.name
+  const resources = [...activeCharacter.resources, ...(activeCharacter.customResources ?? [])]
 
-        <ul className="mt-9 grid grid-cols-2 gap-3" aria-label="Planned resources">
-          {plannedResources.map((resource) => (
-            <li
-              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-center font-semibold text-stone-100 shadow-sm"
-              key={resource}
+  useEffect(() => {
+    saveTrackerToStorage(tracker)
+  }, [tracker])
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return undefined
+    }
+
+    function closeMenuOnOutsidePress(event) {
+      if (!menuRef.current?.contains(event.target)) {
+        setIsMenuOpen(false)
+      }
+    }
+
+    function closeMenuOnEscape(event) {
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeMenuOnOutsidePress)
+    document.addEventListener('keydown', closeMenuOnEscape)
+
+    return () => {
+      document.removeEventListener('pointerdown', closeMenuOnOutsidePress)
+      document.removeEventListener('keydown', closeMenuOnEscape)
+    }
+  }, [isMenuOpen])
+
+  useEffect(() => {
+    if (!isAddingTracker) return undefined
+
+    function closeDialogOnEscape(event) {
+      if (event.key === 'Escape') {
+        setIsAddingTracker(false)
+      }
+    }
+
+    document.addEventListener('keydown', closeDialogOnEscape)
+    return () => document.removeEventListener('keydown', closeDialogOnEscape)
+  }, [isAddingTracker])
+
+  useEffect(() => {
+    if (!isManagingCharacters) return undefined
+
+    function closeCharacterDialogOnEscape(event) {
+      if (event.key === 'Escape') {
+        setIsManagingCharacters(false)
+      }
+    }
+
+    document.addEventListener('keydown', closeCharacterDialogOnEscape)
+    return () => document.removeEventListener('keydown', closeCharacterDialogOnEscape)
+  }, [isManagingCharacters])
+
+  useEffect(() => {
+    if (!characterPendingDeletion) return undefined
+
+    function closeDeleteConfirmationOnEscape(event) {
+      if (event.key === 'Escape') {
+        setCharacterPendingDeletion(null)
+      }
+    }
+
+    document.addEventListener('keydown', closeDeleteConfirmationOnEscape)
+    return () => document.removeEventListener('keydown', closeDeleteConfirmationOnEscape)
+  }, [characterPendingDeletion])
+
+  function updateActiveCharacter(updateCharacter) {
+    setTracker((currentTracker) => ({
+      ...currentTracker,
+      characters: currentTracker.characters.map((character) =>
+        character.id === currentTracker.activeCharacterId
+          ? updateCharacter(character)
+          : character,
+      ),
+    }))
+  }
+
+  function selectResourceSlot(resourceId, slotNumber) {
+    updateActiveCharacter((character) =>
+      updateCharacterResource(character, resourceId, (resource) => {
+        const valueKey = resource.valueType === 'available' ? 'current' : 'marked'
+        const nextValue = getResourceValue(resource) === slotNumber ? slotNumber - 1 : slotNumber
+
+        return { ...resource, [valueKey]: nextValue }
+      }),
+    )
+  }
+
+  function setResourceMaximum(resourceId, getRequestedMaximum) {
+    updateActiveCharacter((character) =>
+      updateCharacterResource(character, resourceId, (resource) => {
+        if (resource.id !== resourceId || resource.id === 'hope') return resource
+
+        const minimum = getMinimumResourceMaximum(resource)
+        const requestedMaximum = getRequestedMaximum(resource)
+        const nextMaximum = Math.min(
+          maximumResourceSlots,
+          Math.max(minimum, Number.isFinite(requestedMaximum) ? requestedMaximum : minimum),
+        )
+        const valueKey = resource.valueType === 'available' ? 'current' : 'marked'
+
+        return {
+          ...resource,
+          max: nextMaximum,
+          [valueKey]: Math.min(getResourceValue(resource), nextMaximum),
+        }
+      }),
+    )
+  }
+
+  function addCustomTracker(event) {
+    event.preventDefault()
+
+    const name = customTrackerName.trim()
+    const maximum = Math.min(
+      maximumResourceSlots,
+      Math.max(1, Number.parseInt(customTrackerMaximum, 10) || 1),
+    )
+
+    if (!name) return
+
+    updateActiveCharacter((character) => ({
+      ...character,
+      customResources: [
+        ...(character.customResources ?? []),
+        {
+          id: createCustomResourceId(),
+          name,
+          valueType: 'marked',
+          marked: 0,
+          max: maximum,
+          slotShape: 'square',
+          isCustom: true,
+        },
+      ],
+    }))
+    setCustomTrackerName('')
+    setCustomTrackerMaximum('6')
+    setIsAddingTracker(false)
+  }
+
+  function adjustCustomTrackerMaximum(amount) {
+    const currentMaximum = Number.parseInt(customTrackerMaximum, 10) || 1
+    const nextMaximum = Math.min(maximumResourceSlots, Math.max(1, currentMaximum + amount))
+    setCustomTrackerMaximum(String(nextMaximum))
+  }
+
+  function removeCustomTracker(resourceId) {
+    updateActiveCharacter((character) => ({
+      ...character,
+      customResources: (character.customResources ?? []).filter(
+        (resource) => resource.id !== resourceId,
+      ),
+    }))
+  }
+
+  function switchCharacter(characterId) {
+    setTracker((currentTracker) => ({
+      ...currentTracker,
+      activeCharacterId: characterId,
+    }))
+  }
+
+  function addCharacter() {
+    const characterId = createCharacterId()
+
+    setTracker((currentTracker) => ({
+      ...currentTracker,
+      activeCharacterId: characterId,
+      characters: [...currentTracker.characters, createDefaultCharacter(characterId)],
+    }))
+    setIsManagingCharacters(false)
+  }
+
+  function deleteCharacter(characterId) {
+    setTracker((currentTracker) => {
+      if (currentTracker.characters.length <= 1) return currentTracker
+
+      const characters = currentTracker.characters.filter(
+        (character) => character.id !== characterId,
+      )
+
+      return {
+        ...currentTracker,
+        activeCharacterId:
+          currentTracker.activeCharacterId === characterId
+            ? characters[0].id
+            : currentTracker.activeCharacterId,
+        characters,
+      }
+    })
+    setCharacterPendingDeletion(null)
+    setIsEditingMaximums(false)
+  }
+
+  return (
+    <main
+      className={`tracker-main min-h-screen px-2 py-3 sm:px-6 sm:py-5${isEditingMaximums ? ' has-edit-bar' : ''}${isEditingMaximums && tracker.characters.length > 1 ? ' has-character-delete' : ''}`}
+    >
+      <section className="tracker-shell mx-auto max-w-2xl px-2 py-5 sm:px-6 sm:py-6">
+        {!isEditingMaximums && (
+          <div className="overflow-menu absolute top-2 right-2 z-20" ref={menuRef}>
+            <button
+              aria-expanded={isMenuOpen}
+              aria-haspopup="menu"
+              aria-label="Open tracker menu"
+              className="overflow-menu-toggle"
+              onClick={() => setIsMenuOpen((isOpen) => !isOpen)}
+              type="button"
             >
-              {resource}
-            </li>
-          ))}
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <circle cx="12" cy="5" r="1.5" />
+                <circle cx="12" cy="12" r="1.5" />
+                <circle cx="12" cy="19" r="1.5" />
+              </svg>
+            </button>
+
+            {isMenuOpen && (
+              <div className="overflow-menu-panel" role="menu">
+                <button
+                  onClick={() => {
+                    setIsEditingMaximums(true)
+                    setIsMenuOpen(false)
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setIsManagingCharacters(true)
+                    setIsMenuOpen(false)
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Characters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <header className="text-center">
+          <h1 className="sr-only">Daggerheart Stat Tracker</h1>
+          <label className="sr-only" htmlFor="character-name">
+            Character name
+          </label>
+          <input
+            className="character-name w-full bg-transparent px-3 text-center text-[clamp(1.75rem,8vw,2.25rem)] tracking-wide outline-none transition-colors placeholder:text-[#aaa8c4] focus:text-[#e4ffff]"
+            id="character-name"
+            maxLength={80}
+            onChange={(event) => {
+              const name = event.target.value
+              updateActiveCharacter((character) => ({ ...character, name }))
+            }}
+            placeholder="Character Name"
+            type="text"
+            value={characterName}
+          />
+
+          <div className="mt-1 flex items-center gap-3" aria-hidden="true">
+            <span className="dagger-rule dagger-rule-left flex-1" />
+            <img className="h-auto w-full max-w-40" src={daggerHeader} alt="" />
+            <span className="dagger-rule dagger-rule-right flex-1" />
+          </div>
+        </header>
+
+        <ul className="mt-6 grid grid-cols-1 gap-3" aria-label="Character resources">
+          {resources.map((resource) => {
+            const resourceValue = getResourceValue(resource)
+            const minimumMaximum = getMinimumResourceMaximum(resource)
+            const slotColumns = Math.max(1, Math.min(resource.max, 6))
+            const slotTrackWidth = slotColumns * 44 + (slotColumns - 1) * 2
+
+            return (
+              <li
+                className="resource-card px-2 py-4 font-semibold sm:px-4"
+                key={resource.id}
+              >
+                {isEditingMaximums && resource.isCustom && (
+                  <button
+                    aria-label={`Remove ${resource.name} tracker`}
+                    className="remove-custom-tracker absolute top-2 right-2 z-10"
+                    onClick={() => removeCustomTracker(resource.id)}
+                    type="button"
+                  />
+                )}
+
+                <div
+                  className={`relative z-1 flex items-baseline justify-between gap-4${isEditingMaximums && resource.isCustom ? ' pr-12' : ''}`}
+                >
+                  <h2 className="text-[clamp(1rem,4.5vw,1.125rem)] uppercase tracking-[0.12em]">
+                    {resource.name}
+                  </h2>
+                  <span className="resource-count text-base font-normal">
+                    {resourceValue} / {resource.max}
+                  </span>
+                </div>
+
+                {isEditingMaximums && (
+                  <div className="maximum-editor relative z-1">
+                    <span className="maximum-editor-label">Maximum</span>
+                    <span className="maximum-editor-connector" aria-hidden="true" />
+                    {resource.id === 'hope' ? (
+                      <span className="maximum-fixed">Fixed at 6</span>
+                    ) : (
+                      <div className="maximum-stepper">
+                        <button
+                          aria-label={`Decrease ${resource.name} maximum`}
+                          disabled={resource.max <= minimumMaximum}
+                          onClick={() =>
+                            setResourceMaximum(resource.id, (currentResource) =>
+                              currentResource.max - 1,
+                            )
+                          }
+                          type="button"
+                        >
+                          −
+                        </button>
+                        <input
+                          aria-label={`${resource.name} maximum`}
+                          className="maximum-value"
+                          inputMode="numeric"
+                          onChange={(event) => {
+                            const digits = event.target.value.replace(/\D/g, '')
+                            const maximum = digits
+                              ? Number.parseInt(digits, 10)
+                              : minimumMaximum
+
+                            setResourceMaximum(resource.id, () => maximum)
+                          }}
+                          onFocus={(event) => event.target.select()}
+                          pattern="[0-9]*"
+                          type="text"
+                          value={resource.max}
+                        />
+                        <button
+                          aria-label={`Increase ${resource.name} maximum`}
+                          disabled={resource.max >= maximumResourceSlots}
+                          onClick={() =>
+                            setResourceMaximum(resource.id, (currentResource) =>
+                              currentResource.max + 1,
+                            )
+                          }
+                          type="button"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div
+                  className="resource-slots relative z-1 mt-3"
+                  style={{
+                    '--slot-columns': slotColumns,
+                    maxWidth: `${slotTrackWidth}px`,
+                  }}
+                >
+                  {resource.max === 0 ? (
+                    <span className="resource-empty text-base font-normal">No slots</span>
+                  ) : (
+                    Array.from({ length: resource.max }, (_, index) => {
+                      const slotNumber = index + 1
+                      const isActive = slotNumber <= resourceValue
+                      const action = resource.valueType === 'available' ? 'Set' : 'Mark'
+
+                      return (
+                        <button
+                          aria-label={`${action} ${resource.name} at ${slotNumber} of ${resource.max}`}
+                          aria-pressed={isActive}
+                          className={`stat-slot stat-slot-${resource.slotShape} stat-slot-${resource.id}${resource.isCustom ? ' stat-slot-custom' : ''}${isActive ? ' is-active' : ''}`}
+                          disabled={isEditingMaximums}
+                          key={slotNumber}
+                          onClick={() => selectResourceSlot(resource.id, slotNumber)}
+                          type="button"
+                        />
+                      )
+                    })
+                  )}
+                </div>
+              </li>
+            )
+          })}
         </ul>
 
-        <p className="mt-8 text-sm text-stone-400">
-          Next: build the first local, offline-friendly tracker.
-        </p>
+        {isEditingMaximums && (
+          <button
+            aria-label="Add custom tracker"
+            className="edit-add-button relative z-10"
+            onClick={() => setIsAddingTracker(true)}
+            type="button"
+          >
+            <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        )}
       </section>
+
+      {isAddingTracker && (
+        <div
+          className="tracker-dialog-backdrop"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) setIsAddingTracker(false)
+          }}
+          role="presentation"
+        >
+          <section
+            aria-labelledby="custom-tracker-title"
+            aria-modal="true"
+            className="tracker-dialog"
+            role="dialog"
+          >
+            <h2 id="custom-tracker-title">Add Custom</h2>
+            <form onSubmit={addCustomTracker}>
+              <label htmlFor="custom-tracker-name">Name</label>
+              <input
+                autoFocus
+                id="custom-tracker-name"
+                maxLength={40}
+                onChange={(event) => setCustomTrackerName(event.target.value)}
+                placeholder="Focus"
+                required
+                type="text"
+                value={customTrackerName}
+              />
+
+              <label htmlFor="custom-tracker-maximum">Maximum</label>
+              <div className="custom-maximum-stepper">
+                <button
+                  aria-label="Decrease maximum"
+                  disabled={(Number.parseInt(customTrackerMaximum, 10) || 1) <= 1}
+                  onClick={() => adjustCustomTrackerMaximum(-1)}
+                  type="button"
+                >
+                  −
+                </button>
+                <input
+                  id="custom-tracker-maximum"
+                  inputMode="numeric"
+                  onChange={(event) => {
+                    const digits = event.target.value.replace(/\D/g, '')
+
+                    if (!digits) {
+                      setCustomTrackerMaximum('')
+                      return
+                    }
+
+                    const maximum = Math.min(
+                      maximumResourceSlots,
+                      Math.max(1, Number.parseInt(digits, 10)),
+                    )
+                    setCustomTrackerMaximum(String(maximum))
+                  }}
+                  pattern="[0-9]*"
+                  required
+                  type="text"
+                  value={customTrackerMaximum}
+                />
+                <button
+                  aria-label="Increase maximum"
+                  disabled={
+                    (Number.parseInt(customTrackerMaximum, 10) || 1) >= maximumResourceSlots
+                  }
+                  onClick={() => adjustCustomTrackerMaximum(1)}
+                  type="button"
+                >
+                  +
+                </button>
+              </div>
+
+              <div className="tracker-dialog-actions">
+                <button onClick={() => setIsAddingTracker(false)} type="button">
+                  Cancel
+                </button>
+                <button className="is-primary" type="submit">
+                  Add
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {isManagingCharacters && (
+        <div
+          className="tracker-dialog-backdrop"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsManagingCharacters(false)
+            }
+          }}
+          role="presentation"
+        >
+          <section
+            aria-labelledby="characters-title"
+            aria-modal="true"
+            className="tracker-dialog character-dialog"
+            role="dialog"
+          >
+            <button
+              aria-label="Close character manager"
+              className="character-dialog-close"
+              onClick={() => setIsManagingCharacters(false)}
+              type="button"
+            />
+            <h2 id="characters-title">Characters</h2>
+
+            <ul className="character-list" aria-label="Saved characters">
+              {tracker.characters.map((character) => {
+                const isActive = character.id === tracker.activeCharacterId
+
+                return (
+                  <li className="character-list-item" key={character.id}>
+                    <button
+                      aria-current={isActive ? 'true' : undefined}
+                      className="character-select-button"
+                      onClick={() => switchCharacter(character.id)}
+                      type="button"
+                    >
+                      <span>{getCharacterDisplayName(character)}</span>
+                      {isActive && <span className="character-state">Current</span>}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+
+            <button className="character-add-button" onClick={addCharacter} type="button">
+              + Add character
+            </button>
+          </section>
+        </div>
+      )}
+
+      {characterPendingDeletion && (
+        <div
+          className="tracker-dialog-backdrop"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) setCharacterPendingDeletion(null)
+          }}
+          role="presentation"
+        >
+          <section
+            aria-labelledby="delete-character-title"
+            aria-modal="true"
+            className="tracker-dialog character-delete-confirmation"
+            role="alertdialog"
+          >
+            <h2 id="delete-character-title">Delete character?</h2>
+            <p>
+              Delete “{getCharacterDisplayName(characterPendingDeletion)}”? This cannot be undone.
+            </p>
+            <div className="tracker-dialog-actions">
+              <button onClick={() => setCharacterPendingDeletion(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="is-danger"
+                onClick={() => deleteCharacter(characterPendingDeletion.id)}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isEditingMaximums && (
+        <div className="edit-action-bar">
+          <button
+            className="edit-save-button"
+            onClick={() => setIsEditingMaximums(false)}
+            type="button"
+          >
+            Save changes
+          </button>
+          {tracker.characters.length > 1 && (
+            <button
+              className="edit-delete-character-button"
+              onClick={() => setCharacterPendingDeletion(activeCharacter)}
+              type="button"
+            >
+              Delete character
+            </button>
+          )}
+        </div>
+      )}
     </main>
   )
 }
