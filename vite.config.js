@@ -8,8 +8,15 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      injectRegister: null,
+      registerType: 'autoUpdate',
+      injectRegister: 'script-defer',
       includeAssets: ['favicon.svg', 'icons/apple-touch-icon.png'],
+      workbox: {
+        cleanupOutdatedCaches: true,
+        globIgnores: ['icons/*-source.svg'],
+        globPatterns: ['**/*.{html,js,css,png,svg,woff,woff2,webmanifest}'],
+        navigateFallback: 'index.html',
+      },
       manifest: {
         id: '/',
         name: 'Daggerheart Stat Tracker',

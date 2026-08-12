@@ -47,6 +47,12 @@ function getCharacterDisplayName(character) {
   return character.name.trim() || 'Unnamed Character'
 }
 
+function copyTracker(tracker) {
+  return globalThis.structuredClone
+    ? globalThis.structuredClone(tracker)
+    : JSON.parse(JSON.stringify(tracker))
+}
+
 export default function App() {
   const [tracker, setTracker] = useState(loadTrackerFromStorage)
   const [trackerOwner, setTrackerOwner] = useState('guest')
@@ -60,6 +66,8 @@ export default function App() {
   const [characterPendingDeletion, setCharacterPendingDeletion] = useState(null)
   const [customTrackerName, setCustomTrackerName] = useState('')
   const [customTrackerMaximum, setCustomTrackerMaximum] = useState('6')
+  const [customDialogViewport, setCustomDialogViewport] = useState(null)
+  const editSnapshotRef = useRef(null)
   const menuRef = useRef(null)
   const {
     error: authError,
@@ -128,6 +136,7 @@ export default function App() {
 
   useEffect(() => {
     if (authLoading) return undefined
+    if (isEditingMaximums) return undefined
 
     const expectedOwner = user?.id ?? 'guest'
     if (trackerOwner !== expectedOwner) return undefined
@@ -146,7 +155,7 @@ export default function App() {
     }, 500)
 
     return () => window.clearTimeout(saveTimer)
-  }, [authLoading, tracker, trackerOwner, user])
+  }, [authLoading, isEditingMaximums, tracker, trackerOwner, user])
 
   useEffect(() => {
     if (!isMenuOpen) {
@@ -179,12 +188,34 @@ export default function App() {
 
     function closeDialogOnEscape(event) {
       if (event.key === 'Escape') {
-        setIsAddingTracker(false)
+        closeCustomTrackerDialog()
       }
     }
 
+    function updateCustomDialogViewport() {
+      const viewport = window.visualViewport
+
+      setCustomDialogViewport(
+        viewport
+          ? {
+              height: `${viewport.height}px`,
+              top: `${viewport.offsetTop}px`,
+            }
+          : null,
+      )
+    }
+
     document.addEventListener('keydown', closeDialogOnEscape)
-    return () => document.removeEventListener('keydown', closeDialogOnEscape)
+    window.visualViewport?.addEventListener('resize', updateCustomDialogViewport)
+    window.visualViewport?.addEventListener('scroll', updateCustomDialogViewport)
+    updateCustomDialogViewport()
+
+    return () => {
+      document.removeEventListener('keydown', closeDialogOnEscape)
+      window.visualViewport?.removeEventListener('resize', updateCustomDialogViewport)
+      window.visualViewport?.removeEventListener('scroll', updateCustomDialogViewport)
+      setCustomDialogViewport(null)
+    }
   }, [isAddingTracker])
 
   useEffect(() => {
@@ -294,6 +325,12 @@ export default function App() {
     setCustomTrackerMaximum(String(nextMaximum))
   }
 
+  function closeCustomTrackerDialog() {
+    setIsAddingTracker(false)
+    setCustomTrackerName('')
+    setCustomTrackerMaximum('6')
+  }
+
   function removeCustomTracker(resourceId) {
     updateActiveCharacter((character) => ({
       ...character,
@@ -351,9 +388,32 @@ export default function App() {
     }
   }
 
+  function beginEditing() {
+    editSnapshotRef.current = copyTracker(tracker)
+    setIsEditingMaximums(true)
+    setIsMenuOpen(false)
+  }
+
+  function saveEdits() {
+    editSnapshotRef.current = null
+    setIsEditingMaximums(false)
+  }
+
+  function cancelEdits() {
+    if (editSnapshotRef.current) {
+      setTracker(editSnapshotRef.current)
+    }
+
+    editSnapshotRef.current = null
+    setIsAddingTracker(false)
+    setCustomTrackerName('')
+    setCustomTrackerMaximum('6')
+    setIsEditingMaximums(false)
+  }
+
   return (
     <main
-      className={`tracker-main min-h-screen px-2 py-3 sm:px-6 sm:py-5${isEditingMaximums ? ' has-edit-bar' : ''}${isEditingMaximums && tracker.characters.length > 1 ? ' has-character-delete' : ''}`}
+      className={`tracker-main min-h-screen px-2 py-3 sm:px-6 sm:py-5${isEditingMaximums ? ' has-edit-bar' : ''}`}
     >
       <section className="tracker-shell mx-auto max-w-2xl px-2 py-5 sm:px-6 sm:py-6">
         {!isEditingMaximums && (
@@ -376,10 +436,7 @@ export default function App() {
             {isMenuOpen && (
               <div className="overflow-menu-panel" role="menu">
                 <button
-                  onClick={() => {
-                    setIsEditingMaximums(true)
-                    setIsMenuOpen(false)
-                  }}
+                  onClick={beginEditing}
                   role="menuitem"
                   type="button"
                 >
@@ -603,20 +660,37 @@ export default function App() {
         )}
       </section>
 
+      {isEditingMaximums && tracker.characters.length > 1 && (
+        <button
+          className="edit-delete-character-button"
+          onClick={() => setCharacterPendingDeletion(activeCharacter)}
+          type="button"
+        >
+          Delete character
+        </button>
+      )}
+
       {isAddingTracker && (
         <div
-          className="tracker-dialog-backdrop"
+          className="tracker-dialog-backdrop custom-tracker-backdrop"
           onPointerDown={(event) => {
-            if (event.target === event.currentTarget) setIsAddingTracker(false)
+            if (event.target === event.currentTarget) closeCustomTrackerDialog()
           }}
           role="presentation"
+          style={customDialogViewport ?? undefined}
         >
           <section
             aria-labelledby="custom-tracker-title"
             aria-modal="true"
-            className="tracker-dialog"
+            className="tracker-dialog custom-tracker-dialog has-close"
             role="dialog"
           >
+            <button
+              aria-label="Close custom tracker dialog"
+              className="tracker-dialog-close"
+              onClick={closeCustomTrackerDialog}
+              type="button"
+            />
             <h2 id="custom-tracker-title">Add Custom</h2>
             <form onSubmit={addCustomTracker}>
               <label htmlFor="custom-tracker-name">Name</label>
@@ -676,9 +750,6 @@ export default function App() {
               </div>
 
               <div className="tracker-dialog-actions">
-                <button onClick={() => setIsAddingTracker(false)} type="button">
-                  Cancel
-                </button>
                 <button className="is-primary" type="submit">
                   Add
                 </button>
@@ -799,20 +870,14 @@ export default function App() {
         <div className="edit-action-bar">
           <button
             className="edit-save-button"
-            onClick={() => setIsEditingMaximums(false)}
+            onClick={saveEdits}
             type="button"
           >
             Save changes
           </button>
-          {tracker.characters.length > 1 && (
-            <button
-              className="edit-delete-character-button"
-              onClick={() => setCharacterPendingDeletion(activeCharacter)}
-              type="button"
-            >
-              Delete character
-            </button>
-          )}
+          <button className="edit-cancel-button" onClick={cancelEdits} type="button">
+            Cancel
+          </button>
         </div>
       )}
     </main>

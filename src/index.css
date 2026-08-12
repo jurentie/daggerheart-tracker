@@ -55,11 +55,7 @@ body::after {
 }
 
 .tracker-main.has-edit-bar {
-  padding-bottom: 6rem;
-}
-
-.tracker-main.has-character-delete {
-  padding-bottom: 10rem;
+  padding-bottom: 9.5rem;
 }
 
 button,
@@ -181,6 +177,20 @@ input {
   background: rgb(3 5 24 / 72%);
   backdrop-filter: blur(5px);
   place-items: center;
+}
+
+.custom-tracker-backdrop {
+  bottom: auto;
+  min-height: 0;
+}
+
+.custom-tracker-dialog {
+  max-height: calc(100% - 2rem);
+  overflow-y: auto;
+}
+
+.custom-tracker-dialog .tracker-dialog-actions {
+  grid-template-columns: 1fr;
 }
 
 .tracker-dialog {
@@ -649,7 +659,7 @@ input {
 }
 
 .edit-save-button,
-.edit-delete-character-button {
+.edit-cancel-button {
   width: 100%;
   min-height: 3rem;
   border: 1px solid rgb(244 220 157 / 76%);
@@ -667,15 +677,37 @@ input {
     0 10px 30px rgb(3 5 24 / 48%);
 }
 
+.edit-cancel-button {
+  color: #f7f0df;
+  background: rgb(12 24 70 / 94%);
+  box-shadow: 0 8px 22px rgb(3 5 24 / 32%);
+}
+
 .edit-delete-character-button {
-  border-color: rgb(239 153 163 / 54%);
-  color: #ffd7dc;
-  background: rgb(73 24 60 / 94%);
-  box-shadow: 0 8px 22px rgb(3 5 24 / 36%);
+  display: block;
+  width: fit-content;
+  min-height: 2.75rem;
+  margin: 1.5rem auto 0;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  color: rgb(242 187 194 / 78%);
+  background: transparent;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  text-decoration: underline;
+  text-decoration-color: rgb(242 187 194 / 30%);
+  text-underline-offset: 0.25rem;
+  cursor: pointer;
+}
+
+.edit-delete-character-button:hover {
+  color: #ffd2d7;
+  text-decoration-color: currentcolor;
 }
 
 .edit-add-button:focus-visible,
 .edit-save-button:focus-visible,
+.edit-cancel-button:focus-visible,
 .edit-delete-character-button:focus-visible {
   outline: 2px solid #ffffff;
   outline-offset: 3px;

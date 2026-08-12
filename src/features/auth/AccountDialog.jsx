@@ -56,6 +56,11 @@ export function AccountDialog({
       const { data, error: submitError } = await authAction(normalizedEmail, password)
       if (submitError) throw submitError
 
+      if (mode === 'signin' && data.session) {
+        onClose()
+        return
+      }
+
       if (mode === 'signup' && data.user && !data.session) {
         setNotice(`A confirmation link was sent to ${normalizedEmail}.`)
       }
