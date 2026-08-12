@@ -11,7 +11,7 @@ export function WelcomeDialog({ onAccount, onGuest }) {
         role="dialog"
       >
         <p className="welcome-eyebrow">Daggerheart Stat Tracker</p>
-        <h2 id="welcome-dialog-title">Welcome, adventurer</h2>
+        <h2 id="welcome-dialog-title">Welcome, adventurer!</h2>
         <p className="welcome-introduction">
           Sign in to keep your characters available across devices.
         </p>
