@@ -19,3 +19,13 @@ export function saveWelcomeChoice() {
     // The current visit can continue even if the browser blocks local storage.
   }
 }
+
+export function clearWelcomeChoice() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.removeItem(welcomeChoiceStorageKey)
+  } catch {
+    // The welcome screen can still be restored for this visit.
+  }
+}

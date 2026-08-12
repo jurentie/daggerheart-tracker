@@ -8,6 +8,7 @@ export function AccountDialog({
   authLoading,
   onClose,
   onRecoveryComplete,
+  onSignedOut,
   passwordRecovery,
   syncError,
   user,
@@ -18,6 +19,7 @@ export function AccountDialog({
   const [error, setError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [notice, setNotice] = useState(null)
+  const [dialogViewport, setDialogViewport] = useState(null)
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -27,6 +29,30 @@ export function AccountDialog({
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
   }, [isSubmitting, onClose])
+
+  useEffect(() => {
+    function updateDialogViewport() {
+      const viewport = window.visualViewport
+
+      setDialogViewport(
+        viewport
+          ? {
+              height: `${viewport.height}px`,
+              top: `${viewport.offsetTop}px`,
+            }
+          : null,
+      )
+    }
+
+    window.visualViewport?.addEventListener('resize', updateDialogViewport)
+    window.visualViewport?.addEventListener('scroll', updateDialogViewport)
+    updateDialogViewport()
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateDialogViewport)
+      window.visualViewport?.removeEventListener('scroll', updateDialogViewport)
+    }
+  }, [])
 
   function changeMode(nextMode) {
     setMode(nextMode)
@@ -103,7 +129,7 @@ export function AccountDialog({
       return
     }
 
-    onClose()
+    onSignedOut()
   }
 
   const activeMode = passwordRecovery ? 'recovery' : mode
@@ -111,16 +137,17 @@ export function AccountDialog({
 
   return (
     <div
-      className="tracker-dialog-backdrop"
+      className="tracker-dialog-backdrop account-dialog-backdrop"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) onClose()
       }}
       role="presentation"
+      style={dialogViewport ?? undefined}
     >
       <section
         aria-labelledby="account-dialog-title"
         aria-modal="true"
-        className="tracker-dialog account-dialog has-close"
+        className="tracker-dialog account-dialog keyboard-aware-dialog has-close"
         role="dialog"
       >
         <button

@@ -3,11 +3,16 @@ import daggerHeader from './assets/dagger-header-v2.png'
 import { createDefaultCharacter } from './data/defaultTracker'
 import { loadTrackerFromCloud, saveTrackerToCloud } from './data/trackerCloud'
 import {
+  clearGuestTrackerStorage,
   isValidTracker,
   loadTrackerFromStorage,
   saveTrackerToStorage,
 } from './data/trackerStorage'
-import { loadWelcomeChoice, saveWelcomeChoice } from './data/welcomeStorage'
+import {
+  clearWelcomeChoice,
+  loadWelcomeChoice,
+  saveWelcomeChoice,
+} from './data/welcomeStorage'
 import { AccountDialog } from './features/auth/AccountDialog'
 import { WelcomeDialog } from './features/auth/WelcomeDialog'
 import { useAuth } from './hooks/useAuth'
@@ -360,7 +365,15 @@ export default function App() {
 
   function deleteCharacter(characterId) {
     setTracker((currentTracker) => {
-      if (currentTracker.characters.length <= 1) return currentTracker
+      if (currentTracker.characters.length <= 1) {
+        const defaultCharacterId = createCharacterId()
+
+        return {
+          ...currentTracker,
+          activeCharacterId: defaultCharacterId,
+          characters: [createDefaultCharacter(defaultCharacterId)],
+        }
+      }
 
       const characters = currentTracker.characters.filter(
         (character) => character.id !== characterId,
@@ -386,6 +399,15 @@ export default function App() {
     if (nextStep === 'account') {
       setIsAccountOpen(true)
     }
+  }
+
+  function resetAfterSignOut() {
+    clearGuestTrackerStorage()
+    clearWelcomeChoice()
+    setTracker(loadTrackerFromStorage())
+    setTrackerOwner('guest')
+    setHasCompletedWelcome(false)
+    setIsAccountOpen(false)
   }
 
   function beginEditing() {
@@ -660,7 +682,7 @@ export default function App() {
         )}
       </section>
 
-      {isEditingMaximums && tracker.characters.length > 1 && (
+      {isEditingMaximums && (
         <button
           className="edit-delete-character-button"
           onClick={() => setCharacterPendingDeletion(activeCharacter)}
@@ -821,9 +843,15 @@ export default function App() {
           <section
             aria-labelledby="delete-character-title"
             aria-modal="true"
-            className="tracker-dialog character-delete-confirmation"
+            className="tracker-dialog character-delete-confirmation has-close"
             role="alertdialog"
           >
+            <button
+              aria-label="Close delete confirmation"
+              className="tracker-dialog-close"
+              onClick={() => setCharacterPendingDeletion(null)}
+              type="button"
+            />
             <h2 id="delete-character-title">Delete character?</h2>
             <p>
               Delete “{getCharacterDisplayName(characterPendingDeletion)}”? This cannot be undone.
@@ -860,6 +888,7 @@ export default function App() {
             if (passwordRecovery) setPasswordRecovery(false)
           }}
           onRecoveryComplete={() => setPasswordRecovery(false)}
+          onSignedOut={resetAfterSignOut}
           passwordRecovery={passwordRecovery}
           syncError={syncError}
           user={user}

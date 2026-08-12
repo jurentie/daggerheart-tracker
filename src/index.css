@@ -179,12 +179,14 @@ input {
   place-items: center;
 }
 
-.custom-tracker-backdrop {
+.custom-tracker-backdrop,
+.account-dialog-backdrop {
   bottom: auto;
   min-height: 0;
 }
 
-.custom-tracker-dialog {
+.custom-tracker-dialog,
+.keyboard-aware-dialog {
   max-height: calc(100% - 2rem);
   overflow-y: auto;
 }

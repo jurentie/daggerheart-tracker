@@ -59,3 +59,13 @@ export function saveTrackerToStorage(tracker, userId = null) {
     // Storage can be unavailable in private browsing or when the device is full.
   }
 }
+
+export function clearGuestTrackerStorage() {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.removeItem(trackerStorageKey)
+  } catch {
+    // The app can still reset for this visit if local storage is unavailable.
+  }
+}
