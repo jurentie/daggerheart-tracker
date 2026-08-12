@@ -87,6 +87,8 @@ export default function App() {
   const characterName = activeCharacter.name
   const resources = [...activeCharacter.resources, ...(activeCharacter.customResources ?? [])]
   const shouldShowWelcome = !authLoading && !user && !hasCompletedWelcome
+  const isTrackerReady =
+    !authLoading && trackerOwner === (user?.id ?? 'guest')
 
   useEffect(() => {
     if (authLoading) return undefined
@@ -431,6 +433,14 @@ export default function App() {
     setCustomTrackerName('')
     setCustomTrackerMaximum('6')
     setIsEditingMaximums(false)
+  }
+
+  if (!isTrackerReady) {
+    return (
+      <main className="tracker-main min-h-screen" aria-busy="true">
+        <span className="sr-only">Loading tracker</span>
+      </main>
+    )
   }
 
   return (
