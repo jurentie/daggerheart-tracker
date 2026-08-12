@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import daggerHeader from './assets/dagger-header-v2.png'
 import { createDefaultCharacter } from './data/defaultTracker'
 import { loadTrackerFromStorage, saveTrackerToStorage } from './data/trackerStorage'
+import { loadWelcomeChoice, saveWelcomeChoice } from './data/welcomeStorage'
+import { AccountDialog } from './features/auth/AccountDialog'
+import { WelcomeDialog } from './features/auth/WelcomeDialog'
+import { useAuth } from './hooks/useAuth'
 
 const maximumResourceSlots = 12
 
@@ -44,15 +48,25 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAddingTracker, setIsAddingTracker] = useState(false)
   const [isManagingCharacters, setIsManagingCharacters] = useState(false)
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
+  const [hasCompletedWelcome, setHasCompletedWelcome] = useState(loadWelcomeChoice)
   const [characterPendingDeletion, setCharacterPendingDeletion] = useState(null)
   const [customTrackerName, setCustomTrackerName] = useState('')
   const [customTrackerMaximum, setCustomTrackerMaximum] = useState('6')
   const menuRef = useRef(null)
+  const {
+    error: authError,
+    loading: authLoading,
+    passwordRecovery,
+    setPasswordRecovery,
+    user,
+  } = useAuth()
   const activeCharacter = tracker.characters.find(
     (character) => character.id === tracker.activeCharacterId,
   )
   const characterName = activeCharacter.name
   const resources = [...activeCharacter.resources, ...(activeCharacter.customResources ?? [])]
+  const shouldShowWelcome = !authLoading && !user && !hasCompletedWelcome
 
   useEffect(() => {
     saveTrackerToStorage(tracker)
@@ -252,6 +266,15 @@ export default function App() {
     setIsEditingMaximums(false)
   }
 
+  function completeWelcome(nextStep) {
+    saveWelcomeChoice()
+    setHasCompletedWelcome(true)
+
+    if (nextStep === 'account') {
+      setIsAccountOpen(true)
+    }
+  }
+
   return (
     <main
       className={`tracker-main min-h-screen px-2 py-3 sm:px-6 sm:py-5${isEditingMaximums ? ' has-edit-bar' : ''}${isEditingMaximums && tracker.characters.length > 1 ? ' has-character-delete' : ''}`}
@@ -295,6 +318,16 @@ export default function App() {
                   type="button"
                 >
                   Characters
+                </button>
+                <button
+                  onClick={() => {
+                    setIsAccountOpen(true)
+                    setIsMenuOpen(false)
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Account
                 </button>
               </div>
             )}
@@ -436,7 +469,41 @@ export default function App() {
                           key={slotNumber}
                           onClick={() => selectResourceSlot(resource.id, slotNumber)}
                           type="button"
-                        />
+                        >
+                          {resource.slotShape === 'shield' && (
+                            <svg
+                              aria-hidden="true"
+                              className="stat-slot-shield-icon"
+                              focusable="false"
+                              shapeRendering="geometricPrecision"
+                              viewBox="0 0 40 40"
+                            >
+                              <defs>
+                                <linearGradient
+                                  id={`armor-slot-fill-${slotNumber}`}
+                                  x1="7"
+                                  x2="34"
+                                  y1="5"
+                                  y2="35"
+                                  gradientUnits="userSpaceOnUse"
+                                >
+                                  <stop stopColor="#e9c66d" />
+                                  <stop offset="0.76" stopColor="#75438e" />
+                                </linearGradient>
+                              </defs>
+                              <path
+                                className="stat-slot-shield-path"
+                                d="M5.5 4.5h29l3.5 8-4 18L20 38 6 30.5l-4-18Z"
+                                fill={
+                                  isActive
+                                    ? `url(#armor-slot-fill-${slotNumber})`
+                                    : '#17184b'
+                                }
+                                vectorEffect="non-scaling-stroke"
+                              />
+                            </svg>
+                          )}
+                        </button>
                       )
                     })
                   )}
@@ -558,12 +625,12 @@ export default function App() {
           <section
             aria-labelledby="characters-title"
             aria-modal="true"
-            className="tracker-dialog character-dialog"
+            className="tracker-dialog character-dialog has-close"
             role="dialog"
           >
             <button
               aria-label="Close character manager"
-              className="character-dialog-close"
+              className="tracker-dialog-close"
               onClick={() => setIsManagingCharacters(false)}
               type="button"
             />
@@ -628,6 +695,27 @@ export default function App() {
             </div>
           </section>
         </div>
+      )}
+
+      {shouldShowWelcome && (
+        <WelcomeDialog
+          onAccount={() => completeWelcome('account')}
+          onGuest={() => completeWelcome('guest')}
+        />
+      )}
+
+      {(isAccountOpen || passwordRecovery) && (
+        <AccountDialog
+          authError={authError}
+          authLoading={authLoading}
+          onClose={() => {
+            setIsAccountOpen(false)
+            if (passwordRecovery) setPasswordRecovery(false)
+          }}
+          onRecoveryComplete={() => setPasswordRecovery(false)}
+          passwordRecovery={passwordRecovery}
+          user={user}
+        />
       )}
 
       {isEditingMaximums && (
