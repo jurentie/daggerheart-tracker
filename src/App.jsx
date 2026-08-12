@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import daggerHeader from './assets/dagger-header-v2.png'
 import { createDefaultCharacter } from './data/defaultTracker'
-import { loadTrackerFromStorage, saveTrackerToStorage } from './data/trackerStorage'
+import { loadTrackerFromCloud, saveTrackerToCloud } from './data/trackerCloud'
+import {
+  isValidTracker,
+  loadTrackerFromStorage,
+  saveTrackerToStorage,
+} from './data/trackerStorage'
 import { loadWelcomeChoice, saveWelcomeChoice } from './data/welcomeStorage'
 import { AccountDialog } from './features/auth/AccountDialog'
 import { WelcomeDialog } from './features/auth/WelcomeDialog'
@@ -44,6 +49,8 @@ function getCharacterDisplayName(character) {
 
 export default function App() {
   const [tracker, setTracker] = useState(loadTrackerFromStorage)
+  const [trackerOwner, setTrackerOwner] = useState('guest')
+  const [syncError, setSyncError] = useState(null)
   const [isEditingMaximums, setIsEditingMaximums] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isAddingTracker, setIsAddingTracker] = useState(false)
@@ -69,8 +76,77 @@ export default function App() {
   const shouldShowWelcome = !authLoading && !user && !hasCompletedWelcome
 
   useEffect(() => {
-    saveTrackerToStorage(tracker)
-  }, [tracker])
+    if (authLoading) return undefined
+
+    let isCurrent = true
+    const owner = user?.id ?? 'guest'
+
+    async function loadTrackerForOwner() {
+      if (!user) {
+        setTracker(loadTrackerFromStorage())
+        setTrackerOwner('guest')
+        setSyncError(null)
+        return
+      }
+
+      setTrackerOwner(null)
+      setSyncError(null)
+
+      try {
+        const cloudTracker = await loadTrackerFromCloud(user.id)
+        if (!isCurrent) return
+
+        if (cloudTracker !== null && !isValidTracker(cloudTracker)) {
+          throw new Error('The cloud tracker uses an unsupported data version.')
+        }
+
+        if (cloudTracker) {
+          setTracker(cloudTracker)
+        } else {
+          const guestTracker = loadTrackerFromStorage()
+          await saveTrackerToCloud(user.id, guestTracker)
+          if (!isCurrent) return
+          setTracker(guestTracker)
+        }
+
+        setTrackerOwner(owner)
+      } catch {
+        if (!isCurrent) return
+
+        setTracker(loadTrackerFromStorage(user.id))
+        setTrackerOwner(owner)
+        setSyncError('Cloud sync is unavailable. Changes are saved on this device for now.')
+      }
+    }
+
+    loadTrackerForOwner()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [authLoading, user])
+
+  useEffect(() => {
+    if (authLoading) return undefined
+
+    const expectedOwner = user?.id ?? 'guest'
+    if (trackerOwner !== expectedOwner) return undefined
+
+    saveTrackerToStorage(tracker, user?.id)
+
+    if (!user) return undefined
+
+    const saveTimer = window.setTimeout(async () => {
+      try {
+        await saveTrackerToCloud(user.id, tracker)
+        setSyncError(null)
+      } catch {
+        setSyncError('Cloud sync is unavailable. Changes are saved on this device for now.')
+      }
+    }, 500)
+
+    return () => window.clearTimeout(saveTimer)
+  }, [authLoading, tracker, trackerOwner, user])
 
   useEffect(() => {
     if (!isMenuOpen) {
@@ -714,6 +790,7 @@ export default function App() {
           }}
           onRecoveryComplete={() => setPasswordRecovery(false)}
           passwordRecovery={passwordRecovery}
+          syncError={syncError}
           user={user}
         />
       )}

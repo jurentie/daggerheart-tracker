@@ -9,6 +9,7 @@ export function AccountDialog({
   onClose,
   onRecoveryComplete,
   passwordRecovery,
+  syncError,
   user,
 }) {
   const [mode, setMode] = useState('signin')
@@ -157,6 +158,11 @@ export function AccountDialog({
           <div className="account-summary">
             <p className="account-status">Signed in as</p>
             <p className="account-email">{user.email}</p>
+            {syncError && (
+              <p className="account-message is-error" role="alert">
+                {syncError}
+              </p>
+            )}
             {notice && <p className="account-message is-success">{notice}</p>}
             {error && (
               <p className="account-message is-error" role="alert">

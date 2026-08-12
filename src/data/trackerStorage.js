@@ -2,11 +2,15 @@ import { defaultTracker } from './defaultTracker'
 
 const trackerStorageKey = 'daggerheart-tracker'
 
+function getTrackerStorageKey(userId) {
+  return userId ? `${trackerStorageKey}-user-${userId}` : trackerStorageKey
+}
+
 function createDefaultTracker() {
   return JSON.parse(JSON.stringify(defaultTracker))
 }
 
-function isValidTracker(tracker) {
+export function isValidTracker(tracker) {
   if (
     !tracker ||
     tracker.version !== defaultTracker.version ||
@@ -25,13 +29,13 @@ function isValidTracker(tracker) {
   )
 }
 
-export function loadTrackerFromStorage() {
+export function loadTrackerFromStorage(userId = null) {
   if (typeof window === 'undefined') {
     return createDefaultTracker()
   }
 
   try {
-    const storedTracker = window.localStorage.getItem(trackerStorageKey)
+    const storedTracker = window.localStorage.getItem(getTrackerStorageKey(userId))
 
     if (!storedTracker) {
       return createDefaultTracker()
@@ -44,13 +48,13 @@ export function loadTrackerFromStorage() {
   }
 }
 
-export function saveTrackerToStorage(tracker) {
+export function saveTrackerToStorage(tracker, userId = null) {
   if (typeof window === 'undefined') {
     return
   }
 
   try {
-    window.localStorage.setItem(trackerStorageKey, JSON.stringify(tracker))
+    window.localStorage.setItem(getTrackerStorageKey(userId), JSON.stringify(tracker))
   } catch {
     // Storage can be unavailable in private browsing or when the device is full.
   }
