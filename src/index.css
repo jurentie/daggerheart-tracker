@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+html {
+  overscroll-behavior-y: contain;
+}
+
 :root {
   color-scheme: dark;
   font-family: "Gloock", Georgia, "Times New Roman", serif;
