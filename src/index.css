@@ -185,8 +185,11 @@ input {
   min-height: 0;
 }
 
-.custom-tracker-dialog,
-.keyboard-aware-dialog {
+.account-dialog-backdrop {
+  align-items: safe center;
+}
+
+.custom-tracker-dialog {
   max-height: calc(100% - 2rem);
   overflow-y: auto;
 }

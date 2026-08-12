@@ -147,7 +147,7 @@ export function AccountDialog({
       <section
         aria-labelledby="account-dialog-title"
         aria-modal="true"
-        className="tracker-dialog account-dialog keyboard-aware-dialog has-close"
+        className="tracker-dialog account-dialog has-close"
         role="dialog"
       >
         <button
